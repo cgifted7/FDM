@@ -1,0 +1,65 @@
+
+    data = unsorted_data(:, sorted_indices);
+
+    num_times = size(data, 1);
+    time_range = linspace(0, (num_times - 1) * dt, num_times);
+    num_points = size(data, 2);
+    num_spatial_points = (num_points - 1) * 10 + 1; % account for the 10 positions between each thermocouple
+    spatial_step = 0.001; % meters
+    density = 1380;
+    temperature_data = zeros(num_times, num_spatial_points); % initialize matrix with proper dimensions
+    time_steps = [];
+
+    % Initialize cumulative_time
+    cumulative_time = 0;
+
+    % Set initial conditions and boundary conditions
+    initial_temp_furthest_mold = data(1, end);
+    temperature_data(1, 2:1:end-1) = initial_temp_furthest_mold; % set initial temperatures at other positions
+    temperature_data(:, 1) = data(:, 1); % set left boundary condition
+    temperature_data(:, end) = data(:, end); % set right boundary condition
+
+    % Compute the temperature at each time step for each point in the material
+    i = 2;
+    time_steps = [];
+    stability_moduli = [];
+
+    while cumulative_time < (num_times - 1)
+        % Update boundary conditions
+        left_boundary_temp = interp1(time_range, data(:, 1), cumulative_time, 'linear', 'extrap');
+        right_boundary_temp = interp1(time_range, data(:, end), cumulative_time, 'linear', 'extrap');
+        temperature_data(i, 1) = left_boundary_temp;
+        temperature_data(i, end) = right_boundary_temp;
+
+        for j = 2:num_spatial_points-1
+            % Compute the temperature at the current point based on the
+            % temperatures at the adjacent points and the thermal conductivity
+            % at the current temperature
+            temperature = temperature_data(i-1, j);
+            conductivity = compute_thermal_conductivity(temperature, coefficients);
+            specific_heat = specific_heat_func(temperature);
+
+            % Check the stability modulus
+            factor = (density * specific_heat * spatial_step^2) / (conductivity * dt);
+            if conductivity < 0 
+                break
+            else
+            while factor < 4 || factor > 5
+                if factor < 4
+                    dt = dt / 2;
+                elseif factor > 5
+                    dt = dt * 1.8;
+                end
+                factor = (density * specific_heat * spatial_step^2) / (conductivity * dt);
+            end
+            end
+            % Use the forward time, central space (FTCS) scheme for numerical integration
+            temperature_data(i,j) = temperature + (conductivity / (density * specific_heat)) * (dt / spatial_step^2) * (temperature_data(i-1,j-1) - 2 * temperature_data(i-1,j) + temperature_data(i-1,j+1));
+            
+        end
+        time_steps = [time_steps, dt];
+        stability_moduli = [stability_moduli, factor];
+        cumulative_time = sum(time_steps); % Update the cumulative_time
+        
+        i = i + 1;
+    end
