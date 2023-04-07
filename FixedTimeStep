@@ -1,0 +1,38 @@
+ data = unsorted_data(:, sorted_indices);
+
+    num_times = size(data, 1);
+    time_step = 1;
+    spatial_step = 0.001; % meters
+    num_points = size(data, 2);
+    num_spatial_points = (num_points - 1) * 10 + 1; % account for the 10 positions between each thermocouple
+    density = 1380;
+    temperature_data = zeros(num_times, num_spatial_points); % initialize matrix with proper dimensions
+
+
+    % Set initial conditions and boundary conditions
+    initial_temp_furthest_mold = data(1, end);
+    temperature_data(1, 2:1:end-1) = initial_temp_furthest_mold; % set initial temperatures at other positions
+    temperature_data(:, 1) = data(:, 1); % set left boundary condition
+    temperature_data(:, end) = data(:, end); % set right boundary condition
+
+
+
+
+    % Compute the temperature at each time step for each point in the material
+    for i = 2:num_times
+        time = (i - 1) * time_step; % time in seconds
+
+        for j = 2:num_spatial_points-1
+            % Compute the temperature at the current point based on the
+            % temperatures at the adjacent points and the thermal conductivity
+            % at the current temperature
+            temperature = temperature_data(i-1,j);
+            conductivity = compute_thermal_conductivity(temperature, coefficients);
+
+            specific_heat = specific_heat_func(temperature);
+
+            % Use the forward time, central space (FTCS) scheme for numerical integration
+            temperature_data(i,j) = temperature + (conductivity / (density * specific_heat)) * (time_step / spatial_step^2) * (temperature_data(i-1,j-1) - 2 * temperature_data(i-1,j) + temperature_data(i-1,j+1));
+        end
+    end
+end
